@@ -1,0 +1,550 @@
+#00 : Slime
+
+        Strength: 5
+         Agility: 3
+              HP: 3
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 1
+              GP: 1
+         Pattern: Attack only
+
+#01 : Red Slime
+
+        Strength: 7
+         Agility: 3
+              HP: 4
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 1
+              GP: 2
+         Pattern: Attack only
+
+#02 : Drakee
+
+        Strength: 9
+         Agility: 6
+              HP: 5 - 6
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 2
+              GP: 2
+         Pattern: Attack only
+
+#03 : Ghost
+
+        Strength: 11
+         Agility: 8
+              HP: 6 - 7
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 4 / 64
+              XP: 3
+              GP: 3 - 4
+         Pattern: Attack only
+
+#04 : Magician
+
+        Strength: 11
+         Agility: 12
+              HP: 10 - 13
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 4
+              GP: 9 - 11
+         Pattern: 50 % to cast HURT
+                  Otherwise attack
+
+#05 : Magidrakee
+
+        Strength: 14
+         Agility: 14
+              HP: 12 - 15
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 5
+              GP: 9 - 11
+         Pattern: 50 % to cast HURT
+                  Otherwise attack
+
+#06 : Scorpion
+
+        Strength: 18
+         Agility: 16
+              HP: 16 - 20
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 6
+              GP: 12 - 15
+         Pattern: Attack only
+
+#07 : Druin
+
+        Strength: 20
+         Agility: 18
+              HP: 17 - 22
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 7
+              GP: 12 - 15
+         Pattern: Attack only
+
+#08 : Poltergeist
+
+        Strength: 18
+         Agility: 20
+              HP: 18 - 23
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 6 / 64
+              XP: 8
+              GP: 13 - 17
+         Pattern: 75 % to cast HURT
+                  Otherwise attack
+
+#09 : Droll
+
+        Strength: 24
+         Agility: 24
+              HP: 19 - 25
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 14 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 10
+              GP: 18 - 24
+         Pattern: Attack only
+
+#10 : Drakeema
+
+        Strength: 22
+         Agility: 26
+              HP: 16 - 20
+    SLEEP resist: 2 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 6 / 64
+              XP: 11
+              GP: 15 - 19
+         Pattern: 25 % to cast HEAL, but only if its HP < 1/4 of its max HP
+                  Otherwise 50 % to cast HURT
+                  Otherwise attack
+
+#11 : Skeleton
+
+        Strength: 28
+         Agility: 22
+              HP: 23 - 30
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 4 / 64
+              XP: 11
+              GP: 22 - 29
+         Pattern: Attack only
+
+#12 : Warlock
+
+        Strength: 28
+         Agility: 22
+              HP: 23 - 30
+    SLEEP resist: 3 / 16
+STOPSPELL resist: 1 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 13
+              GP: 26 - 34
+         Pattern: 25 % to cast SLEEP, but only if you're not asleep
+                  Otherwise 50 % to cast HURT
+                  Otherwise attack
+
+#13 : Metal Scorpion
+
+        Strength: 36
+         Agility: 42
+              HP: 17 - 22
+    SLEEP resist: 0 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 14
+              GP: 30 - 39
+         Pattern: Attack only
+
+#14 : Wolf
+
+        Strength: 40
+         Agility: 30
+              HP: 26 - 34
+    SLEEP resist: 1 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 16
+              GP: 37 - 49
+         Pattern: Attack only
+
+#15 : Wraith
+
+        Strength: 44
+         Agility: 34
+              HP: 28 - 36
+    SLEEP resist: 7 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 4 / 64
+              XP: 17
+              GP: 45 - 59
+         Pattern: 25 % to cast HEAL, but only if its HP < 1/4 of its max HP
+                  Otherwise attack
+
+#16 : Metal Slime
+
+        Strength: 10
+         Agility: 255
+              HP: 4
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 15 / 16
+           Dodge: 1 / 64
+              XP: 115
+              GP: 4 - 5
+         Pattern: 75 % to cast HURT
+                  Otherwise attack
+
+#17 : Specter
+
+        Strength: 40
+         Agility: 38
+              HP: 28 - 36
+    SLEEP resist: 3 / 16
+STOPSPELL resist: 1 / 16
+     HURT resist: 0 / 16
+           Dodge: 4 / 64
+              XP: 18
+              GP: 52 - 69
+         Pattern: 25 % to cast SLEEP, but only if you're not asleep
+                  Otherwise 75 % to cast HURT
+                  Otherwise attack
+
+#18 : Wolflord
+
+        Strength: 50
+         Agility: 36
+              HP: 29 - 38
+    SLEEP resist: 4 / 16
+STOPSPELL resist: 7 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 20
+              GP: 60 - 79
+         Pattern: 50 % to cast STOPSPELL, but only if your spell isn't blocked
+                  Otherwise attack
+
+#19 : Druinlord
+
+        Strength: 47
+         Agility: 40
+              HP: 27 - 35
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 4 / 64
+              XP: 20
+              GP: 63 - 84
+         Pattern: 75 % to cast HEAL, but only if its HP < 1/4 of its max HP
+                  Otherwise 25 % to cast HURT
+                  Otherwise attack
+
+#20 : Drollmagi
+
+        Strength: 52
+         Agility: 50
+              HP: 29 - 38
+    SLEEP resist: 2 / 16
+STOPSPELL resist: 2 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 22
+              GP: 67 - 89
+         Pattern: 50 % to cast STOPSPELL, but only if your spell isn't blocked
+                  Otherwise attack
+
+#21 : Wyvern
+
+        Strength: 56
+         Agility: 48
+              HP: 32 - 42
+    SLEEP resist: 4 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 24
+              GP: 75 - 99
+         Pattern: Attack only
+
+#22 : Rogue Scorpion
+
+        Strength: 60
+         Agility: 90
+              HP: 27 - 35
+    SLEEP resist: 7 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 26
+              GP: 82 - 109
+         Pattern: Attack only
+
+#23 : Wraith Knight
+
+        Strength: 68
+         Agility: 56
+              HP: 35 - 46
+    SLEEP resist: 5 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 3 / 16
+           Dodge: 4 / 64
+              XP: 28
+              GP: 90 - 119
+         Pattern: 75 % to cast HEAL, but only if its HP < 1/4 of its max HP
+                  Otherwise attack
+
+#24 : Golem
+
+        Strength: 120
+         Agility: 60
+              HP: 53 - 70
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 15 / 16
+           Dodge: 0 / 64
+              XP: 5
+              GP: 7 - 9
+         Pattern: Attack only
+
+#25 : Goldman
+
+        Strength: 48
+         Agility: 40
+              HP: 38 - 50
+    SLEEP resist: 13 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 6
+              GP: 150 - 199
+         Pattern: Attack only
+
+#26 : Knight
+
+        Strength: 76
+         Agility: 78
+              HP: 42 - 55
+    SLEEP resist: 6 / 16
+STOPSPELL resist: 7 / 16
+     HURT resist: 0 / 16
+           Dodge: 1 / 64
+              XP: 33
+              GP: 97 - 129
+         Pattern: 50 % to cast STOPSPELL, but only if your spell isn't blocked
+                  Otherwise attack
+
+#27 : Magiwyvern
+
+        Strength: 78
+         Agility: 68
+              HP: 44 - 58
+    SLEEP resist: 2 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 0 / 16
+           Dodge: 2 / 64
+              XP: 34
+              GP: 105 - 139
+         Pattern: 50 % to cast SLEEP, but only if you're not asleep
+                  Otherwise attack
+
+#28 : Demon Knight
+
+        Strength: 79
+         Agility: 64
+              HP: 38 - 50
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 15 / 16
+           Dodge: 15 / 64
+              XP: 37
+              GP: 112 - 149
+         Pattern: Attack only
+
+#29 : Werewolf
+
+        Strength: 86
+         Agility: 70
+              HP: 46 - 60
+    SLEEP resist: 7 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 0 / 16
+           Dodge: 7 / 64
+              XP: 40
+              GP: 116 - 154
+         Pattern: Attack only
+
+#30 : Green Dragon
+
+        Strength: 88
+         Agility: 74
+              HP: 49 - 65
+    SLEEP resist: 7 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 2 / 16
+           Dodge: 2 / 64
+              XP: 45
+              GP: 120 - 159
+         Pattern: 25 % to breathe fire
+                  Otherwise attack
+
+#31 : Starwyvern
+
+        Strength: 86
+         Agility: 80
+              HP: 49 - 65
+    SLEEP resist: 8 / 16
+STOPSPELL resist: 0 / 16
+     HURT resist: 1 / 16
+           Dodge: 2 / 64
+              XP: 43
+              GP: 120 - 159
+         Pattern: 75 % to cast HEALMORE, but only if its HP < 1/4 of its max HP
+                  Otherwise 25 % to breathe fire
+                  Otherwise attack
+
+#32 : Wizard
+
+        Strength: 80
+         Agility: 70
+              HP: 49 - 65
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 7 / 16
+     HURT resist: 15 / 16
+           Dodge: 2 / 64
+              XP: 50
+              GP: 123 - 164
+         Pattern: 50 % to cast HURTMORE
+                  Otherwise attack
+
+#33 : Axe Knight
+
+        Strength: 94
+         Agility: 82
+              HP: 53 - 70
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 3 / 16
+     HURT resist: 1 / 16
+           Dodge: 1 / 64
+              XP: 54
+              GP: 123 - 164
+         Pattern: 25 % to cast SLEEP, but only if you're not asleep
+                  Otherwise attack
+
+#34 : Blue Dragon
+
+        Strength: 98
+         Agility: 84
+              HP: 53 - 70
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 7 / 16
+           Dodge: 2 / 64
+              XP: 60
+              GP: 112 - 149
+         Pattern: 25 % to breathe fire
+                  Otherwise attack
+
+#35 : Stoneman
+
+        Strength: 100
+         Agility: 40
+              HP: 121 - 160
+    SLEEP resist: 2 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 7 / 16
+           Dodge: 1 / 64
+              XP: 65
+              GP: 105 - 139
+         Pattern: Attack only
+
+#36 : Armored Knight
+
+        Strength: 105
+         Agility: 86
+              HP: 68 - 90
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 7 / 16
+     HURT resist: 1 / 16
+           Dodge: 2 / 64
+              XP: 70
+              GP: 105 - 139
+         Pattern: 75 % to cast HEALMORE, but only if its HP < 1/4 of its max HP
+                  Otherwise 25 % to cast HURTMORE
+                  Otherwise attack
+
+#37 : Red Dragon
+
+        Strength: 120
+         Agility: 90
+              HP: 76 - 100
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 7 / 16
+     HURT resist: 15 / 16
+           Dodge: 2 / 64
+              XP: 100
+              GP: 105 - 139
+         Pattern: 25 % to cast SLEEP, but only if you're not asleep
+                  Otherwise 25 % to breathe fire
+                  Otherwise attack
+
+#38 : Dragonlord first form
+
+        Strength: 90
+         Agility: 75
+              HP: 76 - 100
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 15 / 16
+           Dodge: 0 / 64
+              XP: 0
+              GP: 0
+         Pattern: 25 % to cast STOPSPELL, but only if your spell isn't blocked
+                  Otherwise 75 % to cast HURTMORE
+                  Otherwise attack
+
+#39 : Dragonlord second form
+
+        Strength: 140
+         Agility: 200
+              HP: 130
+    SLEEP resist: 15 / 16
+STOPSPELL resist: 15 / 16
+     HURT resist: 15 / 16
+           Dodge: 0 / 64
+              XP: 0
+              GP: 0
+         Pattern: 50 % to breathe a very strong fire
+                  Otherwise attack

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+<script type="application/javascript">
+
+/************************************************************
+ * This utility can be used to visualize the map data in
+ * the Dragon Warrior rom.  To use, put the rom in the
+ * same folder as this file and rename it "dw.nes".
+ *
+ * Only tested with Firefox
+ ************************************************************/
+
+var rom;
+
+var colors=[ "#000000", "#c0c0c0", "#808080", "#ffffff",
+             "#800000", "#ff0000", "#800080", "#ff00ff",
+             "#008000", "#00ff00", "#808000", "#ffff00",
+             "#000080", "#0000ff", "#008080", "#00ffff" ];
+
+var test_path = "wwwwwwwwwnnnnnnnnnnnnnnwnwnnnnnwnwwnwwwwwswwwwswwswswsswswswswwswwwsssssssssssssssssssswswwswswsseeeessseseseeesssseeeseseseeeeeeeessssssssssswwwsssswswswwwswwsseeeeeeesssssssesssssssssssssssssswwswsseseeeeneeeeeeeeeeeneenenenenennneneneneenennenneneneneneneeneeeeneeeeneeeeneeesssssssseesss";
+var test_path3 = "wwwwwwwwwnnnnnnnnnnnnnnwnwnnnnnwnwwnwwwwwswwwwswwswswsswswswswwswwwsssssssssssssssssssswswwswswsseeeessseseseeesssseeeseseseeeeeeeessssssssssswwwsssswswswwwswwsseeeeeeesssssssesssssssssssssssssswwswsseseeeeneeeeeeeeeeeneenenenenennneneneneenennenneneneneneneeneeeeneeeeneeeeneeesssssssseesss";
+var test_path2 = "wwwwwwwwwnnnnnnnnnnnnnnwnwnnnnnwnwwnwwwwwswwwwswwswswsswswswswwswwwsssssssssssssssssssswswwswswsseeeessseseseeesssseeeseseseeeeeeeessssssssssswwwsssswswswwwswwsseeeeeeesssssssesssssssssssssssssswwswsseseeeeneeeeeeeeeeeneenenenenennneneneneenennenneneneneneneeneeeeneeeeneeeeneeesssssssseesss";
+
+function showcoords(e) {
+  var q = document.getElementById("coords");
+  var r = document.getElementById("c1");
+  var xp = e.clientX + window.scrollX - r.offsetLeft;
+  var yp = e.clientY + window.scrollY - r.offsetTop;
+  q.textContent = +((xp/8)|0) + "," + ((yp/8)|0);
+}
+
+function drawDijkstra(data) {
+  var ctx = document.getElementById("c1").getContext("2d");
+  var q = data.split("\n");
+  var j = [];
+  var x, y;
+  for (y=0; y<0x78; y++) {
+    var ln = q[y+2];
+    for (x=0; x<0x78; x++) {
+      var vs = ln.substr(x*4,4);
+      if (vs === "    ") { continue; }
+      var n = parseInt(vs, 16);
+      j[y*200+x] = n;
+      var col = Math.min(255, Math.floor(n/291*256)).toString(16);
+      col = ("00" + col).substr(-2,2);
+      ctx.fillStyle="#" + col + col + col;
+      ctx.fillRect(x*8,y*8,8,8);
+    }
+  }
+
+  x=43; y=43;
+  var n2 = j[y*200+x];
+  var dxs = [-1, 0, 1, 0];
+  var dys = [0, -1, 0, 1];
+  ctx.fillStyle="#00ff00";
+  var n3 = 0;
+  while (x != 73 || y != 102) {
+    n3 += 1;
+    ctx.fillRect(x*8,y*8,8,8);
+    var xn, yn;
+    for (var i=0; i<4; i++) {
+      var xq = x + dxs[i];
+      var yq = y + dys[i];
+      if (j[yq*200+xq] !== undefined && j[yq*200+xq] < n2) {
+        xn = xq;  yn = yq;  n2 = j[yq*200+xq];
+      }
+    }
+    x = xn; y = yn;
+  }
+  //alert(n3);
+}
+
+function selectmap() {
+  var ctx = document.getElementById("c1").getContext("2d");
+  ctx.clearRect(0, 0, 960, 960);
+
+  var el = document.getElementById("map");
+  var q = parseInt(el.value, 16);
+  var i;
+  for(i=0x2f; i<0xc0; i+=5) {
+      if (rom[i] == (q&255) && rom[i+1] == ((q>>8)&255)) {
+          break;
+      }
+  }
+  el = document.getElementById("display");
+  if (i == 0xc0) { el.textContent = "???? (-1,-1)"; return; }
+  var map_w = rom[i+2];
+  var map_h = rom[i+3];
+  var unknown = rom[i+4];
+  el.textContent = "0x" + q.toString(16) + " (" + map_w.toString() + "," + map_h.toString() + ") 0x" + unknown.toString(16);
+  var x, y, k;
+  var ptr = (q - 0x8000) + 16;
+  if (q == 0xa653) {
+    // special handling for the overworld
+    for(y=0; y<=0x77; y++) {
+      var ptr_y = (0xa653+y*2) - 0x8000 + 16;
+      ptr_x = (rom[ptr_y+1]*256 + rom[ptr_y]) - 0x8000 + 16;
+      for (x=0; x<=0x77; ) {
+        k = rom[ptr_x];
+        var l = (k & 0x0f)+1;
+        k = (k&0xf0)>>4;
+        ctx.fillStyle = colors[k];
+        ctx.fillRect(x*8,y*8,l*8,8);
+        x += l;
+        ++ptr_x;
+      }
+    }
+    var dxs={"e":1, "s":0, "w":-1, "n":0};
+    var dys={"e":0, "s":1, "w":0, "n":-1};
+    var draw_path = function(s) {
+      var x = 43, y = 43;
+      ctx.fillRect(x*8,y*8,8,8);
+      for(i=0; i<s.length; i++) {
+        var k = s.charAt(i);
+        x += dxs[k];  y += dys[k];
+        ctx.fillRect(x*8,y*8,8,8);
+      }
+    };
+    ctx.fillStyle=("#00ffff"); draw_path(test_path2);
+    ctx.fillStyle=("#00ff00"); draw_path(test_path);
+  } else {
+    // normal map
+    for(y=0; y<=map_h; y++) {
+      for(x=0; x<=map_w; x++) {
+        var p2 = ptr + (x>>1) + ((map_w+1)>>1)*y;
+        k = rom[p2];
+        k = (x&1) ? (k&0x0f) : ((k&0xf0)>>4);
+        if (q >= 0x8d24) { k &= 0x7; }
+        ctx.fillStyle = colors[k];
+        ctx.fillRect(x*8,y*8,8,8);
+      }
+    }
+  }
+}
+
+function go() {
+  var el = document.getElementById("map");
+  el.addEventListener("change", selectmap);
+  selectmap();
+}
+
+function loadDijkstra() {
+  var req = new XMLHttpRequest();
+  req.open("GET", "dijkstra.txt", true);
+  req.responseType = "test";
+  req.onload = function() {
+    drawDijkstra(req.responseText);
+  };
+  req.send();
+}
+
+function load() {
+  var req = new XMLHttpRequest();
+  req.open("GET", "dw.nes", true);
+  req.responseType = "arraybuffer";
+  req.onload = function() {
+    rom = new Uint8Array(req.response);
+    go();
+    loadDijkstra();
+  };
+  req.send();
+}
+
+</script>
+</head>
+<body onload="load()">
+  <div style="position: fixed; top: 8px; right: 8px">
+    <table>
+      <tr>
+        <td style="background-color: #000; color: #fff;">0</td>
+        <td style="background-color: #ccc;">1</td>
+        <td style="background-color: #888;">2</td>
+        <td style="background-color: #fff;">3</td>
+      </tr>
+      <tr>
+        <td style="background-color: #800; color: #fff;">4</td>
+        <td style="background-color: #f00;">5</td>
+        <td style="background-color: #808; color: #fff;">6</td>
+        <td style="background-color: #f0f;">7</td>
+      </tr>
+      <tr>
+        <td style="background-color: #080;">8</td>
+        <td style="background-color: #0f0;">9</td>
+        <td style="background-color: #880;">a</td>
+        <td style="background-color: #ff0;">b</td>
+      </tr>
+      <tr>
+        <td style="background-color: #008; color: #fff;">c</td>
+        <td style="background-color: #00f; color: #fff;">d</td>
+        <td style="background-color: #088;">e</td>
+        <td style="background-color: #0ff;">f</td>
+      </tr>
+    </table>
+  </div>
+  <select id="map">
+    <option value="a653">a653</option>
+    <option value="80b0">80b0</option>
+    <option value="8178">8178</option>
+    <option value="8240">8240</option>
+    <option value="8402">8402</option>
+    <option value="8434">8434</option>
+    <option value="85f6">85f6</option>
+    <option value="8716">8716</option>
+    <option value="8a9a">8a9a</option>
+    <option value="88d8">88d8</option>
+    <option value="8b62">8b62</option>
+    <option value="8d24">8d24</option>
+    <option value="8d56">8d56</option>
+    <option value="8d88">8d88</option>
+    <option value="8dba">8dba</option>
+    <option value="8e82">8e82</option>
+    <option value="8eb4">8eb4</option>
+    <option value="8ee6">8ee6</option>
+    <option value="8f18">8f18</option>
+    <option value="8f4a">8f4a</option>
+    <option value="8f7c">8f7c</option>
+    <option value="8fd6">8fd6</option>
+    <option value="9038">9038</option>
+    <option value="909a">909a</option>
+    <option value="925c">925c</option>
+    <option value="9162">9162</option>
+    <option value="922a">922a</option>
+    <option value="92b0">92b0</option>
+    <option value="92e2">92e2</option>
+  </select>
+  <div id="display">x</div>
+  <div id="coords" style="position: fixed; top: 8px; left: 1000px;">x,x</div>
+  <canvas id="c1" width="960" height="960" onmousemove="showcoords(event)"></canvas>
+</body>
+</html>
