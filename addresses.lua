@@ -33,8 +33,12 @@ addr.player_gold_w = 0xbc
 addr.player_current_hp = 0xc5
 addr.player_current_mp = 0xc6
 addr.player_level = 0xc7
+addr.player_str = 0xc8
+addr.player_agi = 0xc9
 addr.player_max_hp = 0xca
 addr.player_max_mp = 0xcb
+addr.player_atk = 0xcc
+addr.player_def = 0xcd
 addr.player_x = 0x8e
 addr.player_y = 0x8f
 addr.cursor_x = 0xd8
@@ -49,6 +53,12 @@ addr.inventory_start = 0xc1
 addr.inventory_end = 0xc4
 addr.rng_lo = 0x94
 addr.rng_hi = 0x95
+addr.text_cursor_x = 0xd2
+addr.text_cursor_y = 0xd3
+addr.text_buffer = 0x657c
+addr.monster_str = 0x100
+addr.monster_agi = 0x101
+addr.monster_max_hp = 0x102
 
 -- code/return address pointers
 addr.standing_still = 0xcb30+2
