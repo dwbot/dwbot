@@ -3,7 +3,7 @@ dwbot
 
 Lua script for FCEUX that automatically plays and beats Dragon Warrior.
 
-It uses the speedrun route to beat the game quick-ish.  The bot's personal bests: 5:52:56 (seed 96bb, yolo=true) and 6:02:37 (seed 0da6, yolo=false)
+It uses the speedrun route to beat the game quick-ish.  The bot's personal bests: 5:52:56 (seed 96bb, yolo=true) and 5:59:22 (seed fcdb, yolo=false)
 
 To use: load the DW rom then load "dragonwarrior.lua"
 
