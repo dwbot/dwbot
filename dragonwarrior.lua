@@ -6,7 +6,7 @@
 ------------------------------------------------------------
 
 require "addresses"
-require "dijkstra"
+require "a_star"
 require "monsters"
 
 ----------------------------------------
@@ -18,13 +18,28 @@ yolo = false                            -- if set, the bot doesn't do any safety
 
 dir_button = {e="right", s="down", w="left", n="up"}
 reserved_mp = 0
-goldmen = nil
-last_goldman = nil
 found_stairs = false                    -- whether we already revealed the stairs in charlock
 
 ----------------------------------------
 -- utilities
 ----------------------------------------
+
+-- splices new_lst into lst at positions from,to
+function splice(lst, from, to, new_lst)
+  local result = {}
+  for i=1,from-1 do
+    result[#result+1] = lst[i]
+  end
+  if new_lst then
+    for i=1,#new_lst do
+      result[#result+1] = new_lst[i]
+    end
+  end
+  for i=to+1,#lst do
+    result[#result+1] = lst[i]
+  end
+  return result
+end
 
 -- format hours/minutes/seconds
 function format_time (nframe)
@@ -95,10 +110,11 @@ function npcs (start_n, end_n)
   local end_ptr = end_n*3
   local iter_fn = function()
     if start_ptr >= end_ptr then return end
-    local cx = memory.readwordunsigned(addr.npc_tbl_start+start_ptr) % 0x20
-    local cy = memory.readwordunsigned(addr.npc_tbl_start+start_ptr+1) % 0x20
+    local cx = memory.readbyteunsigned(addr.npc_tbl_start+start_ptr) % 0x20
+    local cy = memory.readbyteunsigned(addr.npc_tbl_start+start_ptr+1) % 0x20
+    local cz = memory.readbyteunsigned(addr.npc_tbl_start+start_ptr+2)
     start_ptr = start_ptr + 3
-    return cx, cy
+    return cx, cy, cz
   end
 
   return iter_fn, 0, 0
@@ -267,37 +283,151 @@ function get_unstuck(x, y, move_back_to, ...)
   end
 
   script("move " .. x .. "," .. y)
+  return true                   -- indicate that the move succeeded
 end
 
 -- certain NPCs can block us permanently
 function check_for_stuck_npcs (zone_ptr, x, y, dir)
-  if not npc_zones[zone_ptr] then return end
-
   if zone_ptr == addr.tantegel_throne_room then
     local lvl = memory.readbyteunsigned(addr.player_level)
     -- throne room, in front of the door
     if lvl == 1 and x == 4 and y == 6 then
-      get_unstuck(x, y, "5,5", "4,6", "4,5")
+      return get_unstuck(x, y, "5,5", "4,6", "4,5")
     end
     -- throne room, in front of the stairs
     if lvl > 1 and y == 8 and dir == "e" then
-      get_unstuck(x, y, "3,8", "4,8", "5,8", "6,8", "7,8", "8,8")
+      return get_unstuck(x, y, "3,8", "4,8", "5,8", "6,8", "7,8", "8,8")
     end
   end
 
   -- kol, in front of the tool shop
-  if zone_ptr == addr.kol and x == 12 and y == 21 then
-    get_unstuck(x, y, "8,21", "9,21", "10,21", "11,21", "12,21")
+  if zone_ptr == addr.kol and x >= 10 and x <= 12 and y == 21 then
+    return get_unstuck(x, y, "8,21", "9,21", "10,21", "11,21", "12,21")
   end
 
   -- brecconary, in the doorway of the tool shop
   if zone_ptr == addr.brecconary and x == 22 and y == 23 and dir == "s" then
-    get_unstuck(x, y, "22,21", "22,22", "22,23")
+    return get_unstuck(x, y, "22,21", "22,22", "22,23")
   end
 end
 
-function move_to (x2, y2, stop_to_fight, dont_wait)
+-- NPCs greatly complicate moving around
+function move_in_town (x2, y2)
+  -- we'll be looking down our path for potential collisions (NPCs that
+  -- occupy the path).  if we see a potential collision, we'll attempt
+  -- to detour around it.  we limit the max length of the detour
+  -- to avoid going too far out of our way.
+  local lookahead = 4                   -- number of squares to look ahead for an NPC
+  local detour_max_length = 8           -- maximum number of squares we're willing to detour
+  local scanahead = 4                   -- number of squares to scan ahead looking for shorter detours
 
+  -- first, compute an "ideal" path that ignores moving npcs
+  local zone_ptr = memory.readwordunsigned(addr.zone_ptr)
+  local x = memory.readbyteunsigned(addr.player_x)
+  local y = memory.readbyteunsigned(addr.player_y)
+  local cost_fn = get_move_fn(zone_ptr)
+  local path = a_star.a_star(x, y, x2, y2, cost_fn)
+  local path_idx = 1
+  local npc_tbl = nil
+
+  -- alternate cost function that collides with npcs that move
+  local npc_cost_fn = function (x, y)
+    local result = cost_fn(x, y)
+    if result > 0 then
+      if npc_tbl[x .. "," .. y] then
+        result = 0                      -- blocked by NPC
+      end
+    end
+    return result
+  end
+
+  while x ~= x2 or y ~= y2 do
+    -- update the table with the NPCs' current position
+    npc_tbl = {}
+    for cx,cy in npcs(0,10) do
+      npc_tbl[cx .. "," .. cy] = true
+    end
+
+    -- look ahead several squares to see if a collision with an NPC is possible
+    local blocked = nil
+    for i=path_idx,math.min(path_idx+lookahead,#path) do
+      local sq = path[i]
+      if npc_tbl[sq.x .. "," .. sq.y] then
+        blocked = i
+        break
+      end
+    end
+
+    if blocked then                     -- attempt a detour
+      -- attempt to find a detour that paths around the NPCs.
+      local best_detour_path, best_detour_length, best_detour_index = nil, nil, nil
+      for i=blocked+1,math.min(blocked+scanahead,#path) do
+        local ideal_length = i - path_idx
+        local detour_sq = path[i]
+        local detour_path = a_star.a_star(x, y, detour_sq.x, detour_sq.y, npc_cost_fn, detour_max_length + ideal_length)
+        if detour_path then
+          -- compute how much longer the detour is than the ideal path
+          local detour_length = #detour_path - ideal_length
+          -- pick the shortest detour
+          if not best_detour_path or detour_length < best_detour_length then
+            best_detour_path = detour_path
+            best_detour_length = detour_length
+            best_detour_index = i
+          end
+        end
+      end
+      -- if we found a detour that is not too long, then
+      -- splice the detour onto our current path:  delete the squares
+      -- from our current position to the unblocked position, and
+      -- insert the detour in its place.
+      if best_detour_path and best_detour_length <= detour_max_length then
+        path = splice(path, path_idx, best_detour_index, best_detour_path)
+      end
+      -- if we couldn't find a detour, we'll just continue down the current
+      -- path and hope the NPCs move out of the way.
+    end
+
+    local next_sq = path[path_idx]
+    path_idx = path_idx + 1
+    x = next_sq.x
+    y = next_sq.y
+    local dir = next_sq.dir
+
+    -- check for stuck NPCs
+    if npc_tbl[x .. "," .. y] then
+      check_for_stuck_npcs(zone_ptr, x, y, dir)
+    end
+
+    local r = peek_stack_w()
+    repeat
+      -- sometimes, NPCs will cut us off and move into a square before we can
+      if not blocked then
+        for cx, cy in npcs(0,10) do
+          if cx == x and cy == y then
+            -- back up and try to detour
+            path_idx = path_idx - 1
+            x = memory.readbyteunsigned(addr.player_x)
+            y = memory.readbyteunsigned(addr.player_y)
+            break
+          end
+        end
+      end
+
+      if (r == addr.end_of_dialog) or (r == addr.end_of_dialog2) then
+        tap("A")                                          -- fairy water ran out
+      else
+        hold(dir_button[dir])
+      end
+      r = peek_stack_w()
+    until (memory.readbyteunsigned(addr.player_x) == x and
+           memory.readbyteunsigned(addr.player_y) == y)
+  end
+
+  return true           -- true = move completed
+end
+
+function move_to (x2, y2, stop_to_fight, dont_wait)
+  -- wait to move?
   local r
   if dont_wait then
     r = peek_stack_w()
@@ -305,50 +435,24 @@ function move_to (x2, y2, stop_to_fight, dont_wait)
     local r = clear_to_move()
   end
 
+  -- special handling for towns
+  local zone_ptr = memory.readwordunsigned(addr.zone_ptr)
+  if npc_zones[zone_ptr] then
+    return move_in_town(x2,y2)
+  end
+
   local x = memory.readbyteunsigned(addr.player_x)
   local y = memory.readbyteunsigned(addr.player_y)
-  local zone_ptr = memory.readwordunsigned(addr.zone_ptr)
   local cost_fn = get_move_fn(zone_ptr)
-  local map = dijkstra.reverse_dijkstra(x, y, x2, y2, cost_fn, zone_ptr)
-  local dxs = {1,0,-1,0}
-  local dys = {0,1,0,-1}
-  local dirs = {"e","s","w","n"}
+  local path = a_star.a_star(x, y, x2, y2, cost_fn)
+  local path_idx = 1
 
   while x ~= x2 or y ~= y2 do
-    -- find our new target square
-    local best = nil
-    for i=1,4 do
-      local nx = x + dxs[i]
-      local ny = y + dys[i]
-      local dir = dirs[i]
-      local blocked = false
-
-      -- is this square blocked by an NPC?
-      if npc_zones[zone_ptr] then
-        for cx,cy in npcs(0,10) do
-          if cx == nx and cy == ny then
-            blocked = true
-            break
-          end
-        end
-      end
-
-      -- choose lower-distance squares over higher-distance ones.
-      -- or choose unblocked squares over blocked squares if they have the same distance.
-      local ndist = map[ny*200+nx]
-      if ndist then
-        if not best or ndist < best.dist or (ndist == best.dist and ((not blocked) and best.blocked)) then
-          best = { dist=ndist, blocked=blocked, dir=dir, x=nx, y=ny }
-        end
-      end
-    end
-
-    blocked, dir, x, y = best.blocked, best.dir, best.x, best.y
-
-    -- check for stuck NPCs
-    if blocked then
-      check_for_stuck_npcs(zone_ptr, x, y, dir)
-    end
+    local next_sq = path[path_idx]
+    path_idx = path_idx + 1
+    x = next_sq.x
+    y = next_sq.y
+    local dir = next_sq.dir
 
     repeat
       if (r == addr.battle_start) then
@@ -630,6 +734,7 @@ function script (...)
       if item_index then
         script("command item")
         menu_select(0, item_index)
+        mash_dialog()             -- we almost always have to mash dialog after a menu command
       end
     elseif string.sub(v,1,7) == "command" then
       -- "command" opens the command menu then selects an option
@@ -757,18 +862,30 @@ end
 -- to the spot where we can talk to her.
 function wait_for_fairy_water_vendor ()
   while true do
-    for cx,cy in npcs(0,10) do
-      if cx == 24 and cy == 4 then return end
+    for cx,cy,cz in npcs(0,10) do
+      -- if cz == 0 then the NPC is standing still
+      if cx == 24 and cy == 4 and cz == 0 then return end
     end
     coroutine.yield("frameadvance")
   end
 end
 
+-- starting from tantegel throne room, leave
+-- town.  if we can cast "return", then do that
+-- since it's faster.  otherwise, walk out.
+function leave_tantegel ()
+  local me = get_player_vars()
+  if can_cast(me, "return") then
+    script("cast return")
+  else
+    script("move 8,8", "command stairs", "move 10,29", "exit s")
+  end
+end
+
 function respawn_after_death ()
   script("wait 386", "tap A",                               -- wait for the death message
-         "wait 90", "tap A", "mash",                        -- chat with the king
-         "move 8,8", "command stairs",                      -- leave the throne room
-         "move 10,29", "exit s")                            -- leave tantegel
+         "wait 90", "tap A", "mash")                        -- chat with the king
+  leave_tantegel()
 end
 
 -- returns true if we have a prob% chance to kill
@@ -858,6 +975,8 @@ function catch_deaths(fn)
       -- so here we propagate the frameadvance signal up the stack and
       -- let the main thread handle it.
       coroutine.yield("frameadvance")
+    elseif r2 == "split" then
+      coroutine.yield(r2, r3)                           -- pass to main thread
     else
       -- error.  bomb out
       assert(false, r2)
@@ -1121,9 +1240,7 @@ function save_and_retry (name, fn)
   -- so we restore it here
   set_rng(rng)
 
-  -- leave tangegel
-  script("move 8,8", "command stairs",
-         "move 10,29", "exit s")
+  leave_tantegel()
 
   local n_attempt = 0
   while true do
@@ -1147,9 +1264,8 @@ function save_and_retry (name, fn)
 
       set_rng(rng)                                              -- restore the rng
 
-      script("wait 90", "tap A", "mash",                        -- chat with the king
-             "move 8,8", "command stairs",
-             "move 10,29", "exit s")                            -- leave tantegel
+      script("wait 90", "tap A", "mash")                        -- chat with the king
+      leave_tantegel()
     end
   end
 end
@@ -1202,6 +1318,23 @@ function hurt_or_melee (me, monster)
   return "fight"
 end
 
+-- cast healmore if the monster can kill us with the next attack
+function healmore_or_fight (me, monster)
+  local max_dmg
+  if monster.name == "Wizard" then
+    max_dmg = 30                -- hurtmore
+  else
+    local lo_dmg, hi_dmg = get_monster_melee_damage()
+    max_dmg = hi_dmg
+  end
+  if me.player_current_hp <= max_dmg and can_cast(me, "healmore") then
+    return "cast healmore"
+  elseif me.player_current_hp <= max_dmg and can_cast(me, "heal") then
+    return "cast heal"
+  end
+  return "fight"
+end
+
 -- if any entry in this array is nil, we just run from the fight
 battle_strategy = {}
 
@@ -1227,14 +1360,18 @@ battle_strategy["Warlock"] = function(me, monster)
   return "fight"
 end
 
+goldmen_to_fight = 5
+goldmen = nil
+last_goldman = nil
+
 battle_strategy["Goldman"] = function (me, monster)
-  -- fight 7 goldmen.  we need the extra gold.
-  if me.player_level >= 12 and goldmen and goldmen < 7 then
+  -- fight some goldmen.  we need the extra gold.
+  if me.player_level >= 12 and goldmen and goldmen < goldmen_to_fight then
     if not last_goldman or me.player_gold_w ~= last_goldman then
       goldmen = goldmen + 1
     end
     last_goldman = me.player_gold_w
-    if goldmen < 7 then
+    if goldmen < goldmen_to_fight then
       return "fight"
     end
   end
@@ -1253,53 +1390,12 @@ battle_strategy["Demon Knight"] = function (me, monster)
   return "fight"
 end
 
-battle_strategy["Werewolf"] = function (me, monster)
-  if me.player_level < 16 then return "run" end
-  return "fight"
-end
-
 battle_strategy["Metal Slime"] = melee_to_death
 
-battle_strategy["Green Dragon"] = function (me, monster)
-  if me.player_level < 17 then return "run" end
-  return "fight"
-end
-
-battle_strategy["Wizard"] = function (me, monster)
-  if me.player_level < 17 then return "run" end
-  return "fight"
-end
-
-battle_strategy["Starwyvern"] = function (me, monster)
-  if me.player_level < 18 then
-    -- below level 18 starwyverns have a good chance of casting healmore,
-    -- so preemptively stopspell them.
-    if get_monster_flag("stopspell") == 0 and can_cast(me, "stopspell") then
-      return "cast stopspell"
-    elseif stopspell_flag == 0 then
-      return "run"
-    end
-  else
-    -- starwyverns should have only about a 30% chance to
-    -- healmore on us when we're at level 18.  so our
-    -- strategy is to try killing them outright, and if
-    -- they heal on us, respond by stopspelling them.
-    -- if we don't stopspell them after a heal, the chance
-    -- that they heal again is quite high.
-
-    -- have they healed on us?  we're going to cheat a
-    -- bit by looking at their current hp, but it's
-    -- the easiest way to check.
-    if (monster.damage_dealt > 1 and
-        memory.readbyteunsigned(addr.monster_hp) == monster.hp_max and
-        get_monster_flag("stopspell") == 0 and
-        can_cast(me, "stopspell")) then
-      return "cast stopspell"
-    end
-  end
-    
-  return "fight"
-end
+battle_strategy["Green Dragon"] = healmore_or_fight
+battle_strategy["Wizard"] = healmore_or_fight
+battle_strategy["Werewolf"] = healmore_or_fight
+battle_strategy["Starwyvern"] = healmore_or_fight
 
 ----------------------------------------
 -- grinding
@@ -1404,7 +1500,7 @@ end
 -- rest at the inn at garinham
 function rest_at_garinham ()
   local me = get_player_vars()
-  if me.player_level >= 15 and can_cast(me, "repel") then
+  if can_cast(me, "repel") then
     script("cast repel")
   else
     script("fairy water")
@@ -1417,7 +1513,7 @@ end
 
 -- healing when grinding outside garinham
 function healing_at_garinham (me)
-  heal_while_grinding (me, me.player_max_hp - 17, 40, rest_at_garinham)
+  heal_while_grinding (me, 25, 25, rest_at_garinham)
 end
 
 -- rest at the inn at cantlin
@@ -1432,10 +1528,14 @@ function healing_at_cantlin (me)
   heal_while_grinding (me, me.player_max_hp - 17, 115, rest_at_cantlin)
 end
 
+split_at_levels = {[4]=true, [8]=true, [10]=true, [12]=true, [13]=true,
+                   [14]=true, [15]=true, [16]=true, [17]=true, [18]=true, [19]=true}
+
 -- walk back and forth between points, fighting random battles
 -- until we reach the specified level (if to is a number), or
 -- the to predicate returns true.  use heal_fn after battle to heal.
 function grind(to, points, heal_fn)
+  local last_level = memory.readbyteunsigned(addr.player_level)
   local pt_idx = 1
   local pt_incr = 2
   points = get_numbers(points)
@@ -1475,25 +1575,37 @@ function grind(to, points, heal_fn)
       fight_monster()
       do_heal()
     end
+
+    if memory.readbyteunsigned(addr.player_level) > last_level then
+      last_level = memory.readbyteunsigned(addr.player_level)
+      if split_at_levels[last_level] then
+        coroutine.yield("split", "Level " .. last_level)
+      end
+    end
   end
 end
 
 -- special function used for the final grind outside haukness
 function grind_at_haukness ()
   local heal_fn = function (me)
-    -- we can be very loose with the healing now that we have erdrick's armor
-    local min_hp = 30
     if me.player_level >= 18 then
-      min_hp = 50                       -- inside haukness is a bit more dangerous
-    end
-    while me.player_current_hp < min_hp and can_cast(me, "heal") do
-      script("cast heal")
-      me.player_current_mp = memory.readbyteunsigned(addr.player_current_mp)
-      me.player_current_hp = memory.readbyteunsigned(addr.player_current_hp)
+      -- stay above hurtmore_max hp outside battle
+      if me.player_current_hp <= 30 and can_cast(me, "healmore") then
+        script("cast healmore")
+      end
+    else
+      -- we can be very loose with the healing now that we have erdrick's armor
+      while me.player_current_hp <= 30 and can_cast(me, "heal") do
+        script("cast heal")
+        me.player_current_mp = memory.readbyteunsigned(addr.player_current_mp)
+        me.player_current_hp = memory.readbyteunsigned(addr.player_current_hp)
+      end
     end
   end
 
   local grind_fn = function ()
+    script("moveheal 34,30,1")                  -- move to the corner of zone 0 before using fairy water
+
     local me = get_player_vars()
     if can_cast(me, "repel") then
       script("cast repel")
@@ -1503,7 +1615,7 @@ function grind_at_haukness ()
 
     if me.player_level < 18 then
       -- outside haukness (Zone 10)
-      grind(18, "{16,90} {18,90}", heal_fn)
+      grind(18, "{24,90} {26,90}", heal_fn)
     end
 
     if me.player_level < 19 then
@@ -1529,19 +1641,31 @@ end
 
 -- rest, buy herbs and fairy water
 function restock_at_brecconary (howmany_fairy_water)
+  local me = get_player_vars()
+  local use_inn = ((me.player_current_hp < me.player_max_hp or
+                    me.player_current_mp < me.player_max_mp) and
+                    me.player_gold_w >= 6)
+  local get_herbs = (num_herbs() < 6 and
+                     me.player_gold_w >= 24)
+  local get_fairy_water = (num_fairy_water() < howmany_fairy_water and
+                           num_keys() > 0 and
+                           me.player_gold_w >= 38)
+
+  if not (use_inn or get_herbs or get_fairy_water) then
+    return                      -- skip the trip
+  end
+
   script("move 48,41")
 
   -- rest at the inn if needed
   local me = get_player_vars()
-  if (me.player_gold_w >= 6 and
-      (me.player_current_hp < me.player_max_hp or
-       me.player_current_mp < me.player_max_mp)) then
+  if use_inn and me.player_gold_w >= 6 then
     script("move 8,21", "face e", "command talk", "select yes")
   end
   
   -- restock herbs
   local me = get_player_vars()
-  if num_herbs() < 6 and me.player_gold_w >= 24 then
+  if get_herbs and me.player_gold_w >= 24 then
     script("move 23,25", "face e", "command talk")
     while num_herbs() < 6 and me.player_gold_w >= 24 do
       script("select 0,0", "select 0,0")
@@ -1552,21 +1676,27 @@ function restock_at_brecconary (howmany_fairy_water)
   
   -- restock fairy water
   local me = get_player_vars()
-  if me.player_gold_w >= 38 and num_keys() > 0 then
+  if get_fairy_water and me.player_gold_w >= 38 then
     script("move 21,7", "face n", "command door",
            "move 22,4", "face e")
-    
-    -- buy 2 fairy waters
     wait_for_fairy_water_vendor()
     script("command talk")
     while num_fairy_water() < howmany_fairy_water and me.player_gold_w >= 38 do
       script("select yes")
       me.player_gold_w = memory.readwordunsigned(addr.player_gold_w)
     end
-    
     script("select no")
   end
-  script("move 16,0", "exit n")            -- leave town
+
+  -- leave via the nearest exit
+  local pos = get_vars("player_x", "player_y")
+  if pos.player_x == 8 then
+    script("move 0,16", "exit w")            -- exit nearest the inn
+  elseif pos.player_y == 25 then
+    script("move 29,15", "exit e")           -- exit nearest the tool shop
+  else
+    script("move 16,0", "exit n")            -- exit nearest the fairy water vendor
+  end
 end
 
 ----------------------------------------
@@ -1575,7 +1705,7 @@ end
 
 function beat_the_game (rng)
   -- start the game
-  script("wait 30", "tap start",                              -- wait for title screen
+  script("wait 90", "tap start",                              -- wait for title screen
          "wait 30", "tap start",                              -- start game
          "wait 30", "tap A",                                  -- "begin a new quest"
          "wait 30", "tap A",                                  -- "adventure log 1"
@@ -1629,11 +1759,10 @@ function beat_the_game (rng)
   --- grinding #1 - get level 3 & 4 ---
   grind(3, "{36,54} {34,54}", healing_at_brecconary)
   grind(ready_for_rimuldar, "{29,26} {28,26}", healing_at_brecconary)
-  coroutine.yield("split", "Level 4")
   
   -- rest and save before attempting the run to rimuldar
   rest_at_brecconary()
-
+ 
   print("Checkpoint: run to rimuldar")
   
   local reach_rimuldar = function()  
@@ -1653,7 +1782,7 @@ function beat_the_game (rng)
   
   -- death warp back to tantegel
   death_warp("{106,72} {104,72}")
-
+ 
   print("Checkpoint: rock mountain cave")
   
   -- head to rock mountain cave
@@ -1665,7 +1794,7 @@ function beat_the_game (rng)
   
   -- death warp again
   death_warp("{6,9} {10,9}")
-
+ 
   -- do the treasure chest glitch
   script("move 8,8", "command stairs", "move 5,13", "face w", "command door",
          "move 1,13", "command take",
@@ -1678,7 +1807,7 @@ function beat_the_game (rng)
     script("command take")
   end
   coroutine.yield("split", "5530 Gold")
-
+ 
   -- head to garinham and buy a large shield
   script("move 10,29", "exit s",
          "moveheal 2,2,10",
@@ -1724,11 +1853,8 @@ function beat_the_game (rng)
   -- grinding #2 : grind at rimuldar to level 10
   grind(10, "{106,72} {104,72}", healing_at_rimuldar)
   
-  -- grinding #3 : grind south of rimuldar to level 13 and 15,235 gold
-  goldmen = 0                                           -- keep track of the number of goldmen killed
-  grind(ready_for_erdricks_armor, "{110,90} {112,90}", healing_at_rimuldar)
-  goldmen = nil
-  coroutine.yield("split", "Level 13")
+  -- grinding #3 : grind south of rimuldar to level 12 and 15,235 gold
+  grind(12, "{110,90} {112,90}", healing_at_rimuldar)
   
   ----------------------------------------
   -- erdrick's armor
@@ -1744,7 +1870,8 @@ function beat_the_game (rng)
     town_tile_costs[10] = 2               -- swamp
     town_tile_costs[11] = 3               -- trap
   
-    script("fairy water", "moveheal 25,89,30",
+    script("moveheal 34,30,1", "fairy water",           -- move to the corner of zone 0 before using fairy water
+           "moveheal 25,89,30",
            -- no emergency healing for the final move.  we need to save mp/herbs for the axe knight
            "moveheal 17,12,55")
     fight_axe_knight()
@@ -1757,9 +1884,16 @@ function beat_the_game (rng)
   
     script("moveheal 12,19,50", "exit s")       -- leave haukness
   end
-
+ 
   print("Checkpoint: Erdrick's armor")  
   save_and_retry("Get erdrick's armor", get_armor)
+  coroutine.yield("split", "Erdrick's Armor")
+
+  -- grind to 13 now that we have the armor
+  goldmen = 0                                           -- keep track of the number of goldmen killed
+  last_goldman = nil
+  grind(ready_for_cantlin, "{16,88} {17,88}", healing_at_garinham)
+  goldmen = nil
   
   ----------------------------------------
   -- garinham's grave
@@ -1792,17 +1926,22 @@ function beat_the_game (rng)
          "moveheal 1,10,40", "command stairs",
          "moveheal 9,5,40", "command stairs",
          "moveheal 5,4,40", "command stairs",
-         "moveheal 13,6,40", "command take", "cast outside", "exit e",          -- grab the harp and leave
-         "cast return")
-  
+         "moveheal 13,6,40", "command take", "cast outside", "exit e")          -- grab the harp and leave
   reserved_mp = 0
-  rest_at_brecconary()
+
+  if not yolo then
+    script("cast return")
+    rest_at_brecconary()
+  end
   
   ----------------------------------------
   -- cantlin & token
   ----------------------------------------
   
   local fetch_token = function ()
+    if not yolo then
+      script("moveheal 34,30,1")                          -- move to the corner of zone 0 before using fairy water
+    end
     script("fairy water", "moveheal 73,99,53")
     fight_golem()
     script("moveheal 73,102,50")
@@ -1841,6 +1980,7 @@ function beat_the_game (rng)
 
   print("Checkpoint: Erdrick's token")  
   save_and_retry("Get the token", fetch_token)
+  coroutine.yield("split", "Erdrick's Token")
   
   ----------------------------------------
   -- fetch quests & erdrick's sword
@@ -1858,7 +1998,8 @@ function beat_the_game (rng)
   
   -- fetch the staff of rain
   reserved_mp = 8
-  script("fairy water", "moveheal 81,1,20", "command stairs",
+  script("moveheal 44,31,1", "fairy water",           -- move to the corner of zone 0 before using fairy water
+         "moveheal 81,1,20", "command stairs",
          "move 5,4", "face w", "command talk",
          "move 3,4", "command take",
          "move 4,9", "command stairs")
@@ -1923,13 +2064,11 @@ function beat_the_game (rng)
     -- this time, safety save
     save_and_retry("Fetch Erdrick's sword", fetch_sword2)
   end
+  coroutine.yield("split", "Erdrick's Sword")
 
   -- back to tantegel  
   death_warp("{4,5} {5,5}")
-  coroutine.yield("split", "Erdrick gear")
-  
-  -- leave tantegel
-  script("move 8,8", "command stairs", "move 10,29", "exit s", "fairy water")
+  leave_tantegel()
   
   ----------------------------------------
   -- final grind & battle
@@ -1939,7 +2078,6 @@ function beat_the_game (rng)
  
   reserved_mp = 0
   grind_at_haukness()  
-  coroutine.yield("split", "Level 19")
  
   -- back to tantegel
   local me = get_player_vars()
@@ -1947,8 +2085,7 @@ function beat_the_game (rng)
     script("cast return")
   else
     death_warp("{0,4} {1,4}")
-    script("move 8,8", "command stairs",                    -- leave the throne room
-           "move 10,29", "exit s")                          -- leave tantegel
+    leave_tantegel()
   end
   
   -- rest at brecconary and restock
@@ -1956,7 +2093,6 @@ function beat_the_game (rng)
 
   local final_fight = function()  
     -- make our way to the dragonlord fight
-    reserved_mp = 100                                     -- save ALL mp for the final battle
     script("fairy water", "moveheal 104,44,10",
            "moveheal 0,29,10", "command stairs",
            "fairy water", "moveheal 48,48,50")
@@ -1983,6 +2119,7 @@ function beat_the_game (rng)
   end
 
   print("Checkpoint: Dragonlord")
+  reserved_mp = 100                                       -- save ALL mp for the final battle
   save_and_retry("Beat the Dragonlord", final_fight)
 
   -- warp back to tantegel
@@ -2029,10 +2166,6 @@ while true do
     memory.writebyte(addr.wram + i, 0)
   end
 
-  for i=1,60 do
-    emu.frameadvance()          -- give the game time to initialize
-  end
-
   -- decompress the overworld map
   overworld_map = {}
   decompress_overworld_map()
@@ -2062,7 +2195,6 @@ while true do
       end
       emu.frameadvance()
       nframe = nframe + 1
-      -- read_text()
     end
     r1, r2, r3 = coroutine.resume(co)
   end
@@ -2070,6 +2202,8 @@ while true do
   if not r1 then
     print(r2)                   -- print the script error and bomb
     break
+  elseif r2 == "again" then
+    -- loop back around
   elseif r2 == "dead" then
     for i=1,120 do
       emu.frameadvance()        -- pause at death, then try again!
