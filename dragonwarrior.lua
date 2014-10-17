@@ -15,6 +15,8 @@ require "monsters"
 
 show_time = true                        -- if set, draw the time for the current run in the GUI
 yolo = false                            -- if set, the bot doesn't do any safety-saving
+which_prg = nil                         -- which version of the game is this?
+death_msg_wait = nil                    -- time to wait for the death message.  varies based on game version.
 
 dir_button = {e="right", s="down", w="left", n="up"}
 reserved_mp = 0
@@ -500,10 +502,19 @@ function move_heal (x, y, min_hp, emergency_hp)
       -- do we need to heal?
       local me = get_player_vars()
       local do_heal = nil
-      if can_cast(me, "heal") and ((me.player_current_hp < min_hp) or ((me.player_max_hp - me.player_current_hp) >= 17)) then
+      -- armor = equipment & 0x1c
+      local player_armor = (me.player_equipment % 0x20) - (me.player_equipment % 4)
+      -- heal when our current hp drops below the minimum
+      if can_cast(me, "heal") and (me.player_current_hp < min_hp) then
         do_heal = "cast heal"
-      elseif can_use_herb() and ((me.player_current_hp < min_hp) or ((me.player_max_hp - me.player_current_hp) >= 38)) then
+      elseif can_use_herb() and (me.player_current_hp < min_hp) then
         do_heal = "use herb"
+      -- if we don't have erdrick's armor, then cast heal when our current_hp + max_heal <= max_hp
+      elseif can_cast(me, "heal") and player_armor ~= 0x1c and ((me.player_max_hp - me.player_current_hp) >= 17) then
+        do_heal = "cast heal"
+      -- -- if we don't have erdrick's armor, then use an herb when our current_hp + max_herb <= max_hp
+      -- elseif can_use_herb() and and player_armor ~= 0x1c and ((me.player_max_hp - me.player_current_hp) >= 38) then
+      --   do_heal = "use herb"
       end
       
       if do_heal then
@@ -582,11 +593,10 @@ menu_commands = { -- normal command menu
                   radiant = { 0, 3 },
                   stopspell = { 0, 4 },
                   outside = { 0, 5 },
-                  -- return = { 0, 6 },                      -- "return" is a keyword
+                  ["return"] = { 0, 6 },
                   repel = { 0, 7 },
                   healmore = { 0, 8 },
                   hurtmore = { 0, 9 } }
-menu_commands["return"] = { 0, 6 }
 
 -- select an item from the menu
 function menu_select (x, y)
@@ -839,7 +849,7 @@ function get_player_vars ()
   return get_vars("player_exp_w", "player_gold_w",
                   "player_current_hp", "player_max_hp",
                   "player_current_mp", "player_max_mp",
-                  "player_level")
+                  "player_level", "player_equipment")
 end
 
 -- get monster status flags (sleep, stopspell'd)
@@ -883,7 +893,7 @@ function leave_tantegel ()
 end
 
 function respawn_after_death ()
-  script("wait 386", "tap A",                               -- wait for the death message
+  script(death_msg_wait, "tap A",                           -- wait for the death message
          "wait 90", "tap A", "mash")                        -- chat with the king
   leave_tantegel()
 end
@@ -1097,7 +1107,7 @@ function death_warp(points)
   -- only end in death.
   catch_deaths(fight_until_dead)
 
-  script("wait 386", "tap A",                               -- wait for the death message
+  script(death_msg_wait, "tap A",                           -- wait for the death message
          "wait 90", "tap A", "mash")                        -- chat with the king
 end
 
@@ -1254,7 +1264,7 @@ function save_and_retry (name, fn)
       break
     else
       -- death
-      script("wait 386")                                        -- wait for the death message
+      script(death_msg_wait)                                    -- wait for the death message
       local rng = memory.readwordunsigned(addr.rng_lo)          -- save the rng
       coroutine.yield("reset")                                  -- reset the game
 
@@ -1277,7 +1287,7 @@ end
 -- for certain monsters, it's better to cast sleep before running away
 run_strategy = {}
 run_strategy["Magiwyvern"] = function(me, monster)
-  if get_monster_flag("stopspell") == 0 and can_cast(me, "stopspell") then
+  if me.player_level < 18 and get_monster_flag("stopspell") == 0 and can_cast(me, "stopspell") then
     return "cast stopspell"
   end
   return "run"
@@ -1410,6 +1420,12 @@ function heal_while_grinding (me, cast_heal_at, return_to_inn_at, inn_script_fn,
     me.player_current_hp = memory.readbyteunsigned(addr.player_current_hp)
   end
 
+  -- use herbs before returning to the inn
+  while me.player_level >= 12 and can_use_herb() and (me.player_current_hp <= return_to_inn_at) do
+    script("use herb")
+    me.player_current_hp = memory.readbyteunsigned(addr.player_current_hp)
+  end
+
   -- rest at the inn if needed
   if min_mp and me.player_current_mp < min_mp then
     inn_script_fn()
@@ -1418,7 +1434,7 @@ function heal_while_grinding (me, cast_heal_at, return_to_inn_at, inn_script_fn,
   end
 end
 
--- get to level 4 and 59 gold before heading to rimular
+-- get to level 4 and 59 gold before heading to rimuldar
 function ready_for_rimuldar (me)
   if me.player_level < 4 or me.player_gold_w < 59 then
     return false
@@ -1428,7 +1444,8 @@ end
 
 -- get to level 13 and 14,800 gold before heading to cantlin
 function ready_for_cantlin (me)
-  if me.player_level < 13 or me.player_gold_w < 14850 then
+  -- need extra gold for the inn and herbs at garinham
+  if me.player_level < 13 or me.player_gold_w < 14950 then
     return false
   end
   return true
@@ -1476,12 +1493,18 @@ function rest_at_rimuldar ()
   -- during one of our trips to the inn at rimuldar,
   -- we should stop to buy keys.
   local gold = memory.readwordunsigned(addr.player_gold_w)
-  if num_keys() < 6 and gold > 400 then
+  if num_keys() < 1 and gold > 400 then
     script("move 4,5", "face s", "command talk")
     while num_keys() < 6 do
       script("select yes")
     end
     script("select no", "move 0,3", "exit w")
+  -- steal the old man's wings after we have keys
+  elseif num_keys() == 6 and not get_inventory_index("wings") then
+    script("move 21,20", "face s", "command door",
+           "move 21,23", "face e", "command door",
+           "move 24,23", "command take",
+           "move 29,15", "exit e")
   else
     script("move 29,15", "exit e")
   end
@@ -1592,14 +1615,19 @@ function grind_at_haukness ()
       -- stay above hurtmore_max hp outside battle
       if me.player_current_hp <= 30 and can_cast(me, "healmore") then
         script("cast healmore")
+        me = get_player_vars()
       end
     else
       -- we can be very loose with the healing now that we have erdrick's armor
       while me.player_current_hp <= 30 and can_cast(me, "heal") do
         script("cast heal")
-        me.player_current_mp = memory.readbyteunsigned(addr.player_current_mp)
-        me.player_current_hp = memory.readbyteunsigned(addr.player_current_hp)
+        me = get_player_vars()
       end
+    end
+    -- might as well use herbs if we got 'em
+    while me.player_current_hp <= 30 and can_use_herb() do
+      script("use herb")
+      me = get_player_vars()
     end
   end
 
@@ -1803,10 +1831,10 @@ function beat_the_game (rng)
          "move 3,15")
   
   -- grind some gold
-  while memory.readwordunsigned(addr.player_gold_w) < 5530 do
+  while memory.readwordunsigned(addr.player_gold_w) < 5375 do
     script("command take")
   end
-  coroutine.yield("split", "5530 Gold")
+  coroutine.yield("split", "5375 Gold")
  
   -- head to garinham and buy a large shield
   script("move 10,29", "exit s",
@@ -1816,21 +1844,13 @@ function beat_the_game (rng)
          "select no",
          "move 19,13", "exit e")
   
-  -- head to kol.  do some shopping. 
+  -- head to kol.  buy the full plate and get the fairy flute
   town_tile_costs[12] = 0                       -- HACK for kol : don't attempt to path through doors
   script("moveheal 90,37,10", "moveheal 104,10,15",
          "move 20,12", "face e", "command talk", "select yes",          -- open the weapon shop
          "select 0,3", "select yes",                                    -- buy the full plate
          "select no", "move 9,6", "command search",                     -- get the fairy flute
-         "move 12,21", "face e", "command talk", "select buy")
-  
-  -- max out herbs
-  while num_herbs() < 6 do
-    script("select 0,0", "select yes")                  -- select the herb, buy more
-  end
-  
-  script("select 0,3", "select no",                     -- buy wings
-         "move 0,22", "exit w")                         -- leave kol
+         "move 6,0", "exit n")                                          -- leave town
   town_tile_costs[12] = 1                       -- HACK for kol : don't attempt to path through doors
   
   ----------------------------------------
@@ -1888,7 +1908,7 @@ function beat_the_game (rng)
   print("Checkpoint: Erdrick's armor")  
   save_and_retry("Get erdrick's armor", get_armor)
   coroutine.yield("split", "Erdrick's Armor")
-
+ 
   -- grind to 13 now that we have the armor
   goldmen = 0                                           -- keep track of the number of goldmen killed
   last_goldman = nil
@@ -1928,7 +1948,7 @@ function beat_the_game (rng)
          "moveheal 5,4,40", "command stairs",
          "moveheal 13,6,40", "command take", "cast outside", "exit e")          -- grab the harp and leave
   reserved_mp = 0
-
+ 
   if not yolo then
     script("cast return")
     rest_at_brecconary()
@@ -1937,7 +1957,7 @@ function beat_the_game (rng)
   ----------------------------------------
   -- cantlin & token
   ----------------------------------------
-  
+
   local fetch_token = function ()
     if not yolo then
       script("moveheal 34,30,1")                          -- move to the corner of zone 0 before using fairy water
@@ -1951,10 +1971,14 @@ function beat_the_game (rng)
            "move 26,12", "face w", "command talk",
            "select yes", "select 0,1", "select yes", "select no")
     
+    -- buy 2 keys to replace the ones we used in rimuldar
+    script("move 27,8", "face n", "command talk",
+           "select yes", "select yes", "select no")
+
     -- restock fairy water
-    if num_empty_slots() > 2 then
+    if num_empty_slots() > 1 then
       script("move 20,13", "face e", "command talk")
-      while num_empty_slots() > 2 do        -- leave room for the token and the stones of sunlight
+      while num_empty_slots() > 1 do        -- leave room for the token
         script("select yes")
       end
       script("select no")
@@ -1974,7 +1998,7 @@ function beat_the_game (rng)
            "move 5,1", "exit n")
   
     -- fetch erdrick's token
-    reserved_mp = 8                       -- save mp for return
+    reserved_mp = 16                                            -- save mp for return*2
     script("moveheal 83,113,50", "command search", "cast return")
   end
 
@@ -1986,20 +2010,15 @@ function beat_the_game (rng)
   -- fetch quests & erdrick's sword
   ----------------------------------------
   
-  script("move 43,43", "move 18,5", "face s", "command door",
-         "move 24,3", "face n", "command talk",
-         "select yes", "select no")             -- buy another key while we're here
-  
   -- fetch the stones of sunlight
-  script("move 29,29", "command stairs",
-         "move 4,5", "command take",
-         "move 0,4", "command stairs",
-         "exit e")
+  script("move 43,43", "move 18,5", "face s", "command door",
+         "move 29,29", "command stairs",
+         "move 4,5", "fairy water",                             -- make room for the stones by using fairy water
+         "command take", "cast return")                         -- grab the stones and warp out
   
   -- fetch the staff of rain
   reserved_mp = 8
-  script("moveheal 44,31,1", "fairy water",           -- move to the corner of zone 0 before using fairy water
-         "moveheal 81,1,20", "command stairs",
+  script("moveheal 81,1,20", "command stairs",
          "move 5,4", "face w", "command talk",
          "move 3,4", "command take",
          "move 4,9", "command stairs")
@@ -2007,10 +2026,11 @@ function beat_the_game (rng)
   -- fetch the rainbow drop
   script("fairy water", "moveheal 104,44,20",
          "moveheal 0,29,10", "command stairs",
-         "moveheal 108,109,50", "command stairs",
+         "fairy water", "moveheal 108,109,50", "command stairs",
          "move 3,5", "face e", "command talk",
          "move 0,4", "command stairs")
-  
+
+  -- start at rimuldar and fetch the sword from charlock  
   local fetch_sword = function()
     script("moveheal 48,48,50", "moveheal 10,1,50")
     if not found_stairs then
@@ -2028,6 +2048,7 @@ function beat_the_game (rng)
            "moveheal 5,5,50", "command take")          -- the sword
   end
 
+  -- restart from tantegel after a death and fetch the sword from charlock
   local fetch_sword2 = function()
     script("fairy water", "moveheal 104,44,20",
            "moveheal 0,29,10", "command stairs",
@@ -2044,7 +2065,7 @@ function beat_the_game (rng)
   reserved_mp = 0
 
   -- use the rainbow drop
-  script("fairy water", "moveheal 65,49,50", "face w", "use rainbow drop")
+  script("moveheal 65,49,50", "face w", "use rainbow drop")
   
   -- modify the overworld map now that the bridge is there
   overworld_map[1 + 49*overworld_width + 64] = 1
@@ -2084,7 +2105,7 @@ function beat_the_game (rng)
   if can_cast(me, "return") then
     script("cast return")
   else
-    death_warp("{0,4} {1,4}")
+    death_warp("{18,12} {17,12}")
     leave_tantegel()
   end
   
@@ -2103,9 +2124,9 @@ function beat_the_game (rng)
            "moveheal 3,0,50", "command stairs",           -- b2
            "moveheal 1,6,50", "command stairs",           -- b3
            "moveheal 2,2,50", "command stairs",           -- b4
-           "moveheal 0,0,50", "command stairs",           -- b5
-           "moveheal 9,6,50", "command stairs",           -- b6
-           "moveheal 17,24,50")                           -- final
+           "moveheal 0,0,80", "command stairs",           -- b5
+           "moveheal 9,6,80", "command stairs",           -- b6
+           "moveheal 17,24,80")                           -- final
     
     -- heal up!
     local me = get_player_vars()
@@ -2143,13 +2164,24 @@ end
 -- start
 ----------------------------------------
 
+-- detect the version of the game
+-- in PRG0, the title screen says "TRADEMARK TO NINTENDO"
+-- in PRG1, the title screen says "TRADEMARK OF NINTENDO"
+if rom.readbyteunsigned(0x3fae) == 0x37 then
+  which_prg = "PRG0"
+  death_msg_wait = "wait 386"
+else
+  which_prg = "PRG1"
+  death_msg_wait = "wait 394"
+end
+
 local n_attempt = 0
 local best_time = nil
 local best_rng = nil
 
 while true do
   if best_time then
-    print(string.format("Best time: %s   Best RNG : %04x (YOLO=%s)", format_time(best_time), best_rng, tostring(yolo)))
+    print(string.format("Best time: %s   Best RNG : %04x (YOLO=%s, %s)", format_time(best_time), best_rng, tostring(yolo), which_prg))
   end
 
   emu.softreset()
@@ -2178,7 +2210,7 @@ while true do
   end
 
   n_attempt = n_attempt + 1
-  print(string.format("Attempt #%d   RNG seed: %04x   YOLO: %s", n_attempt, rng, tostring(yolo)))
+  print(string.format("Attempt #%d   RNG seed: %04x   YOLO: %s  %s", n_attempt, rng, tostring(yolo), which_prg))
 
   -- run the script as a coroutine.  if the script dies,
   -- pause for dramatic effect then try again
@@ -2211,7 +2243,7 @@ while true do
     print("Dead")
   else
     -- we did it!
-    print(string.format("Successful run!   Total time: %s   RNG seed: %04x   YOLO: %s", format_time(nframe), rng, tostring(yolo)))
+    print(string.format("Successful run!   Total time: %s   RNG seed: %04x   YOLO: %s  %s", format_time(nframe), rng, tostring(yolo), which_prg))
     if (not best_time) or nframe < best_time then
       best_time = nframe
       best_rng = rng

@@ -30,6 +30,7 @@ addr.map_width = 0x13
 addr.map_height = 0x14
 addr.player_exp_w = 0xba
 addr.player_gold_w = 0xbc
+addr.player_equipment = 0xbe
 addr.player_current_hp = 0xc5
 addr.player_current_mp = 0xc6
 addr.player_level = 0xc7
