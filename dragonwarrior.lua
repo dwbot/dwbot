@@ -20,7 +20,6 @@ death_msg_wait = nil                    -- time to wait for the death message.  
 
 dir_button = {e="right", s="down", w="left", n="up"}
 reserved_mp = 0
-found_stairs = false                    -- whether we already revealed the stairs in charlock
 
 ----------------------------------------
 -- utilities
@@ -866,6 +865,12 @@ function get_monster_flag (flag)
   end
 
   return math.floor(m_flags / div) % 2
+end
+
+-- whether we've found the stairs in charlock
+function found_charlock_stairs ()
+  -- flags & 0x04
+  return (math.floor(memory.readbyteunsigned(addr.charlock_flags) / 4) % 2) == 1
 end
 
 -- wait for the fairy water vendor in brecconary to move
@@ -2033,9 +2038,8 @@ function beat_the_game (rng)
   -- start at rimuldar and fetch the sword from charlock  
   local fetch_sword = function()
     script("moveheal 48,48,50", "moveheal 10,1,50")
-    if not found_stairs then
+    if not found_charlock_stairs() then
       script("command search")
-      found_stairs = true
     end
     script("command stairs",
            "moveheal 8,19,50", "command stairs",       -- b1
@@ -2192,7 +2196,6 @@ while true do
   town_tile_costs[10] = 2               -- swamp
   town_tile_costs[11] = 3               -- trap
   town_tile_costs[12] = 1               -- doors
-  found_stairs = false
   
   for i=0x30,0x45 do            -- nuke the save data
     memory.writebyte(addr.wram + i, 0)

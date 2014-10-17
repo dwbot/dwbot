@@ -40,6 +40,7 @@ addr.player_max_hp = 0xca
 addr.player_max_mp = 0xcb
 addr.player_atk = 0xcc
 addr.player_def = 0xcd
+addr.charlock_flags = 0xcf
 addr.player_x = 0x8e
 addr.player_y = 0x8f
 addr.cursor_x = 0xd8
